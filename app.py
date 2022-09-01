@@ -486,22 +486,17 @@ def add_category():
                     'status':200})
 
 
-@app.route('/category/<id>', methods=['PUT'])
+@app.route('/category/<idc>', methods=['PUT'])
 @token_required
-def update_category(current_user,id):
-  category = Category.query.get(id)
+def update_category(current_user,idc):
+  category = Category.query.get(idc)
   name= request.json['name']
-  ExistCat = Category.query.filter_by(name=request.json['name']).first()
-  if ExistCat:
-    return jsonify({'error':"true",
-                    'message':'Category existe'
-        })
   image = request.json['image']
   category.name = name
-  if image !="":
+  if image :
     category.image = image
   db.session.commit()
-  return jsonify({ 'results': 'category modifier' }) 
+  return jsonify({ 'status':200,'message': 'category modifier' }) 
 
 @app.route('/category/<id>', methods=['DELETE'])
 @token_required
