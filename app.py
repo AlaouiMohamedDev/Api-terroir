@@ -42,13 +42,30 @@ class Category(db.Model):
         self.name = name
         self.image = image
 
+# class coopérative
+class Cooperative(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(300))
+    email = db.Column(db.String,unique=True)
+    adress= db.Column(db.String(300))
+    tel= db.Column(db.String(300))
+    description = db.Column(db.Text)
+    image = db.Column(db.String(300))
+  
+    def __init__(self, name, email,adress,tel ,description,image):
+        self.name = name
+        self.email = email
+        self.adress = adress
+        self.tel=tel
+        self.description = description
+        self.image = image
 
 # class produit
 class Produit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nom = db.Column(db.String(300),unique=True)
     prix = db.Column(db.Float)
-    description = db.Column(db.String(300))
+    description = db.Column(db.Text)
     category = db.Column(db.String(300))
     image = db.Column(db.String(300))
     qte = db.Column(db.Integer)
@@ -102,6 +119,13 @@ class Commande(db.Model):
     self.prixT = prixT
     self.id_panier = id_panier
 
+class CooperativeModelSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name', 'email','adress' ,'tel','description','image')
+
+
+Cooperative_schema = CooperativeModelSchema()
+Cooperatives_schema = CooperativeModelSchema(many=True)
 
 class ProduitModelSchema(ma.Schema):
     class Meta:
@@ -146,8 +170,6 @@ def token_required(f):
         return f(current_user, *args, **kwargs)
 
     return decorated
-
-
 
 #######################Produit#########################
 @app.route('/ajouter_produit',methods=['POST'])
@@ -388,7 +410,7 @@ def signup_user():
                     'message':'Email existe'
         })
   else:
-    user = User(public_id=str(uuid.uuid4()), name=data['userName'],email=data['email'], password=hashed_password,admin=False)
+    user = User(public_id=str(uuid.uuid4()), name=data['userName'],email=data['email'], password=hashed_password,admin=True)
     db.session.add(user)
     db.session.commit()
     return jsonify({'message' : 'registered successfully',
@@ -518,6 +540,65 @@ def afficherCategory(current_user):
   category = Category.query.all()
   return jsonify(Categories_schema.dump(category))
 
+# add new coopérative
+@app.route('/cooperative', methods=['POST'])
+def add_cooperative():
+
+  data = request.get_json()
+
+  ExistCoop = Category.query.filter_by(name=data['email']).first()
+  if ExistCoop:
+    return jsonify({'error':"true",
+                    'message':'Cooperative existe'
+        })
+  else:
+    cooperative = Cooperative(name=data['name'],email=data['email'],adress=data['adress'],tel=data['tel'],description=data['description'],image=data['image'])
+    db.session.add(cooperative)
+    db.session.commit()
+    return jsonify({'message' : 'cooperative ajouté par succée',
+                    'status':200})
+
+#modifier cooperative
+
+@app.route('/cooperative/<idc>', methods=['PUT'])
+@token_required
+def update_cooperative(current_user,idc):
+  cooperative = Cooperative.query.get(idc)
+  name= request.json['name']
+  email= request.json['email']
+  adress = request.json['adress']
+  tel= request.json['tel']
+  description= request.json['description']
+  image = request.json['image']
+  cooperative.name = name
+  cooperative.email = email
+  cooperative.adress = adress
+  cooperative.tel = tel
+  cooperative.description = description
+  if image :
+    cooperative.image = image
+  db.session.commit()
+  return jsonify({ 'status':200,'message': 'cooperative modifier' }) 
+
+@app.route('/cooperative/<id>', methods=['DELETE'])
+@token_required
+#delete cooperative
+def delete_cooperative(current_user,id):
+
+  cooperative = Cooperative.query.get(id)
+  db.session.delete(cooperative)
+  db.session.commit()
+
+  return jsonify({ 'status':200,'message': 'cooperative deleted' }) 
+#affichher all cooperative
+@app.route('/cooperatives', methods=['GET'])
+@token_required
+def affichercooperative(current_user):
+  cooperative = Cooperative.query.all()
+  return jsonify(Cooperatives_schema.dump(cooperative))
+
+#db.create_all()
 # Run Server
 if __name__ == '__main__':
   app.run(debug=True)
+
