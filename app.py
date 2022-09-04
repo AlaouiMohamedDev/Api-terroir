@@ -12,6 +12,7 @@ from werkzeug.security import generate_password_hash,check_password_hash
 import datetime 
 from functools import wraps
 from flask_cors import CORS
+from datetime import date
 
 
 # Init app
@@ -30,6 +31,31 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialisation de la base de données "db"
 db = SQLAlchemy(app)
 ma = Marshmallow(app)
+
+
+#Setting Message Table
+
+class Message(db.Model):
+  id = db.Column(db.Integer, primary_key=True)
+  name = db.Column(db.String(50))
+  email = db.Column(db.String(50))
+  message = db.Column(db.String(80))
+  seen = db.Column(db.Boolean)
+
+  def __init__(self, name,email ,message,seen):
+        self.name = name
+        self.email = email
+        self.message = message
+        self.seen = seen
+
+class MessageModelSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name', 'email','message' ,'seen')    
+
+Message_schema = MessageModelSchema()
+Messages_schema = MessageModelSchema(many=True)
+
+#END of Setting Message Table
 
 # class category
 
@@ -85,8 +111,11 @@ class User(db.Model):
   name = db.Column(db.String(50),unique=True)
   email = db.Column(db.String(300),unique=True)
   password = db.Column(db.String(80))
+  tel = db.Column(db.String(80))
   adresse = db.Column(db.String(300))
   admin = db.Column(db.Boolean)
+  isLogedIn = db.Column(db.Boolean)
+  deletedAt = db.Column(db.Date)
   children = db.relationship('Panier', backref='User')
   children1 = db.relationship('Commande', backref='User')
  
@@ -118,6 +147,8 @@ class Commande(db.Model):
     self.id_user = id_user
     self.prixT = prixT
     self.id_panier = id_panier
+
+
 
 class CooperativeModelSchema(ma.Schema):
     class Meta:
@@ -410,7 +441,7 @@ def signup_user():
                     'message':'Email existe'
         })
   else:
-    user = User(public_id=str(uuid.uuid4()), name=data['userName'],email=data['email'], password=hashed_password,admin=True)
+    user = User(public_id=str(uuid.uuid4()), name=data['userName'],email=data['email'], password=hashed_password,admin=False)
     db.session.add(user)
     db.session.commit()
     return jsonify({'message' : 'registered successfully',
@@ -437,17 +468,18 @@ def modifier_user(current_user, public_id):
 #login
 @app.route('/login',methods=['POST'])
 def login():
-    username = request.json['username']
+    email = request.json['email']
     password = request.json['password']
 
-    user = User.query.filter_by(name=username).first()
+    user = User.query.filter_by(email=email).first()
 
     if not user:
         return jsonify({'message':'Email ou mot de passe incorrecte','status':401})
     
     if check_password_hash(user.password, password):
         token = jwt.encode({'public_id': user.public_id}, app.config['SECRET_KEY'], 'HS256')
-
+        user.isLogedIn = True
+        db.session.commit()
         return jsonify({'token' : token,
                         'status':200,
                         'public_id':user.public_id,
@@ -455,31 +487,82 @@ def login():
                         'email' : user.email,
                         'name' : user.name,
                         'admin': user.admin,
-                        'password': user.password  
+                        'password': user.password  ,
+                        'isLogedIn': user.isLogedIn
         })
     return jsonify({'error':"true",
                     'message':'Email ou mot de passe incorrecte'
         })
 
+@app.route('/logout/<id>',methods=['GET'])
+def logout(id):
+  user = User.query.filter_by(id=id).first()
+  user.isLogedIn= False
+  db.session.commit()
+  return jsonify({'status':"200",
+                    'message':'logged out successfuly',
+                    'isLogedIn': user.isLogedIn
+        })
+        
 #getUser
 @app.route('/getUser/<id>',methods=['GET'])
 def getUser(id):
-   
-   
     user = User.query.filter_by(public_id=id).first()
-
     if not user:
       return jsonify({'msg': 'n existe pas'})
     user_data= {}
+    user_data['id']= user.id
     user_data['public_id']= user.public_id
     user_data['name']= user.name
     user_data['password']= user.password
     user_data['admin']= user.admin
+    user_data['isLogedIn']= user.isLogedIn
     
     return jsonify({'user': user_data,'status':200})
 
+#getAllUsers
+@app.route('/getUsers',methods=['GET'])
+def getUsers():
+    users = User.query.all()
+    return jsonify(Users_schema.dump(users))
 
 
+#DeleteUser
+@app.route('/user',methods=['PUT'])
+@token_required
+def delete_user(current_user):
+    user = User.query.get(request.json['idUser'])
+    password = request.json['password']
+    admin = User.query.get(request.json['idAdmin'])
+    if check_password_hash(admin.password, password):
+      user.deletedAt = date.today()
+      db.session.commit()
+      return jsonify({'status':200,'message':user.name+' deleted successfully'})
+    else:
+      return jsonify({'status':400,'message':'not deleted'})
+
+#RestoreUser
+@app.route('/restorUser',methods=['PUT'])
+@token_required
+def restore_user(current_user):
+    user = User.query.get(request.json['idUser'])
+    password = request.json['password']
+    admin = User.query.get(request.json['idAdmin'])
+    if check_password_hash(admin.password, password):
+      user.deletedAt = None
+      db.session.commit()
+      return jsonify({'status':200,'message':user.name+' Restored successfully'})
+    else:
+      return jsonify({'status':400,'message':'not restored'})
+
+
+class UserModelSchema(ma.Schema):
+    class Meta:
+        fields = ('id','public_id','deletedAt','isLogedIn','name','email','admin','tel','image','adress','password')
+
+
+User_schema = UserModelSchema()
+Users_schema = UserModelSchema(many=True)
 
 class CategoryModelSchema(ma.Schema):
     class Meta:
@@ -535,8 +618,7 @@ def delete_category(current_user,id):
   return jsonify({ 'status':200,'message': 'category deleted' }) 
 
 @app.route('/categories', methods=['GET'])
-@token_required
-def afficherCategory(current_user):
+def afficherCategory():
   category = Category.query.all()
   return jsonify(Categories_schema.dump(category))
 
@@ -592,11 +674,36 @@ def delete_cooperative(current_user,id):
   return jsonify({ 'status':200,'message': 'cooperative deleted' }) 
 #affichher all cooperative
 @app.route('/cooperatives', methods=['GET'])
-@token_required
-def affichercooperative(current_user):
+def affichercooperative():
   cooperative = Cooperative.query.all()
   return jsonify(Cooperatives_schema.dump(cooperative))
 
+
+
+####################################   MESSAGES    ####################################  
+# add new Message
+@app.route('/message', methods=['POST'])
+def add_message():
+    data = request.get_json()
+    message= Message(name=data['name'],email=data['email'],message=data['message'],seen=False)
+    db.session.add(message)
+    db.session.commit()
+    return jsonify({'message' : 'message ajouté par succée',
+                    'status':200})
+
+#affichher all meassges
+@app.route('/messages', methods=['GET'])
+def affichermessages():
+  message = Message.query.all()
+  return jsonify(Messages_schema.dump(message))
+
+@app.route('/message/<id>', methods=['PUT'])
+def update_message(id):
+  message = Message.query.get(id)
+  message.seen = True
+  db.session.commit()
+  return jsonify({ 'status':200,'message': 'message modifier' }) 
+#################################   END MESSAGES    ####################################  
 #db.create_all()
 # Run Server
 if __name__ == '__main__':
