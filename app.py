@@ -63,6 +63,7 @@ class Category(db.Model):
   id = db.Column(db.Integer, primary_key=True)
   name = db.Column(db.String(50),unique=True)
   image = db.Column(db.String(80))
+  
 
   def __init__(self, name, image):
         self.name = name
@@ -78,6 +79,7 @@ class Cooperative(db.Model):
     description = db.Column(db.Text)
     image = db.Column(db.String(300))
   
+  
     def __init__(self, name, email,adress,tel ,description,image):
         self.name = name
         self.email = email
@@ -92,16 +94,18 @@ class Produit(db.Model):
     nom = db.Column(db.String(300),unique=True)
     prix = db.Column(db.Float)
     description = db.Column(db.Text)
-    category = db.Column(db.String(300))
+    category = db.Column(db.Integer,nullable = False)
+    cooperative = db.Column(db.Integer,nullable = False)
     image = db.Column(db.String(300))
     qte = db.Column(db.Integer)
-    children = db.relationship('Panier', backref='Produit')
+
   
-    def __init__(self, nom, prix, description,category,qte,image):
+    def __init__(self, nom, prix, description,cooperative,category,qte,image):
         self.nom = nom
         self.prix = prix
         self.description = description
         self.category = category
+        self.cooperative = cooperative
         self.qte = qte
         self.image = image
 
@@ -116,16 +120,14 @@ class User(db.Model):
   admin = db.Column(db.Boolean)
   isLogedIn = db.Column(db.Boolean)
   deletedAt = db.Column(db.Date)
-  children = db.relationship('Panier', backref='User')
-  children1 = db.relationship('Commande', backref='User')
+
  
 class Panier(db.Model):
   id = db.Column(db.Integer, primary_key=True)
-  produit_id = db.Column(db.Integer, db.ForeignKey(Produit.id),nullable = False)
-  user_id = db.Column(db.Integer, db.ForeignKey(User.id),nullable = False)
+  produit_id = db.Column(db.Integer)
+  user_id = db.Column(db.Integer)
   qte_produit = db.Column(db.Integer)
-  children = db.relationship('Commande', backref='Panier')
-  
+
   
   def __init__(self, produit_id, user_id,qte_produit):
       self. produit_id = produit_id
@@ -137,8 +139,8 @@ class Commande(db.Model):
   address = db.Column(db.String(500))
   statut = db.Column(db.String(500))
   date = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-  id_user = db.Column(db.Integer,db.ForeignKey(User.id),nullable=False)
-  id_panier = db.Column(db.Integer ,db.ForeignKey(Panier.id),nullable =False)
+  id_user = db.Column(db.Integer)
+  id_panier = db.Column(db.Integer)
   prixT = db.Column(db.Float)
 
   def __init__(self ,address,id_panier, statut,id_user,prixT):
@@ -160,7 +162,7 @@ Cooperatives_schema = CooperativeModelSchema(many=True)
 
 class ProduitModelSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'nom', 'prix', 'description','category','qte','image')
+        fields = ('id', 'nom', 'prix','cooperative' ,'description','category','qte','image')
 
 
 Produit_schema = ProduitModelSchema()
@@ -203,55 +205,59 @@ def token_required(f):
     return decorated
 
 #######################Produit#########################
-@app.route('/ajouter_produit',methods=['POST'])
+@app.route('/product',methods=['POST'])
 @token_required
 def ajouterProduit(current_user):
-    nomProduit = request.json['nom_produit']
-    prix = request.json['prix_produit']
-    desc = request.json['desc_produit']
-    category = request.json['category']
+    nomProduit = request.json['name']
+    prix = request.json['price']
+    desc = request.json['description']
+    category = request.json['catId']
+    cooperative = request.json['coopId']
     image = request.json['image']
     qte = request.json['qte']
-    produit = Produit(nom=nomProduit,prix=prix,description=desc,category=category,qte=qte)
+    produit = Produit(nom=nomProduit,prix=prix,description=desc,cooperative=cooperative,category=category,qte=qte,image=image)
     db.session.add(produit)
     db.session.commit()
-    return jsonify({ 'results': 'produit ajouter' })
+    return jsonify({'status':200 ,'message': 'produit ajouter' })
 
-@app.route('/afficher_produit',methods=['GET'])
-@token_required
-def afficherProduit(current_user):
+@app.route('/products',methods=['GET'])
+
+def afficherProduit():
   produit = Produit.query.all()
   return jsonify(Produits_schema.dump(produit))
 
-@app.route('/produit/<id>', methods=['PUT'])
+@app.route('/product/<id>', methods=['PUT'])
 @token_required
 def update_produit(current_user,id):
   produit = Produit.query.get(id)
-
-  nomProduit = request.json['nom_produit']
-  prix = request.json['prix_produit']
-  desc = request.json['desc_produit']
-  category = request.json['category']
+  nomProduit = request.json['name']
+  prix = request.json['price']
+  desc = request.json['description']
+  category = request.json['catId']
+  cooperative = request.json['coopId']
   image = request.json['image']
   qte = request.json['qte']
   produit.nom = nomProduit
   produit.prix = prix
   produit.desc = desc
-  produit.category = category
+  produit.category = category 
   produit.qte = qte
-  produit.image = image
+  if image:
+    produit.image = image
   db.session.commit()
-  return jsonify({ 'results': 'produit modifier' }) 
+  return jsonify({'status':200, 'results': 'produit modifier' }) 
 
 
-@app.route('/Produit_delet/<id>', methods=['DELETE'])
-def delete_Produit(id):
-
+@app.route('/product/<id>', methods=['DELETE'])
+@token_required
+def delete_Produit(current_user,id):
   produit = Produit.query.get(id)
+  if not produit:
+    return jsonify({ 'status':400,'results': 'produit not found' }) 
   db.session.delete(produit)
   db.session.commit()
 
-  return jsonify({ 'results': 'produit deleted' }) 
+  return jsonify({ 'status':200,'results': 'produit deleted' }) 
 
 
 @app.route('/produit/<id>',methods=['GET'])
@@ -451,18 +457,18 @@ def signup_user():
 @app.route('/user/<public_id>',methods=['PUT'])
 @token_required
 def modifier_user(current_user, public_id):
-  if not current_user.admin:
-    return jsonify({'message' : 'Cannot perform that function!'})
-
   user = User.query.filter_by(public_id=public_id).first()
-
   if not user:
     return jsonify({'message' : 'No user found!'})
-
-  user.admin = True
+  if not check_password_hash(user.password, request.json['password']):
+    return jsonify({'message' : 'Password invalid!'})
+  user.name = request.json['name']
+  if request.json['adress'] !="":
+    user.adresse = request.json['adress']
+  if request.json['tel'] !="":
+    user.tel = request.json['tel']
   db.session.commit()
-
-  return jsonify({'message' : 'The user has been promoted!'})
+  return jsonify({'status':200,'message' : 'The user has updated!'})
 
 
 #login
@@ -558,7 +564,7 @@ def restore_user(current_user):
 
 class UserModelSchema(ma.Schema):
     class Meta:
-        fields = ('id','public_id','deletedAt','isLogedIn','name','email','admin','tel','image','adress','password')
+        fields = ('id','public_id','deletedAt','isLogedIn','name','email','admin','tel','image','adresse','password')
 
 
 User_schema = UserModelSchema()
