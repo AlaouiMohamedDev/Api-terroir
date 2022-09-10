@@ -78,9 +78,10 @@ class Cooperative(db.Model):
     tel= db.Column(db.String(300))
     description = db.Column(db.Text)
     image = db.Column(db.String(300))
+    date = db.Column(db.DateTime, default=datetime.datetime.utcnow)
   
   
-    def __init__(self, name, email,adress,tel ,description,image):
+    def __init__(self, name, email,adress,tel,description,image):
         self.name = name
         self.email = email
         self.adress = adress
@@ -98,9 +99,10 @@ class Produit(db.Model):
     cooperative = db.Column(db.Integer,nullable = False)
     image = db.Column(db.String(300))
     qte = db.Column(db.Integer)
+    date_created = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
   
-    def __init__(self, nom, prix, description,cooperative,category,qte,image):
+    def __init__(self, nom, prix, description, cooperative,category,qte,image):
         self.nom = nom
         self.prix = prix
         self.description = description
@@ -108,6 +110,7 @@ class Produit(db.Model):
         self.cooperative = cooperative
         self.qte = qte
         self.image = image
+
 
 class User(db.Model):
   id = db.Column(db.Integer, primary_key=True)
@@ -134,27 +137,45 @@ class Panier(db.Model):
       self.user_id =user_id
       self.qte_produit = qte_produit
 
+class Detail_commande(db.Model):
+  id = db.Column(db.Integer, primary_key=True)
+  id_prod= db.Column(db.Integer)
+  id_cmd = db.Column(db.Integer)
+  qte = db.Column(db.Integer)
+
+  
+  def __init__(self,  id_prod, id_cmd,qte):
+      self.  id_prod =  id_prod
+      self.id_cmd = id_cmd
+      self.qte = qte
+
 class Commande(db.Model):
   id = db.Column(db.Integer, primary_key=True)
-  address = db.Column(db.String(500))
-  statut = db.Column(db.String(500))
+  firstName = db.Column(db.String(500))
+  lastName = db.Column(db.String(500))
+  city = db.Column(db.String(500))
+  adress = db.Column(db.String(500))
+  statut = db.Column(db.String(500) ,default="En traitement")
   date = db.Column(db.DateTime, default=datetime.datetime.utcnow)
   id_user = db.Column(db.Integer)
-  id_panier = db.Column(db.Integer)
   prixT = db.Column(db.Float)
+  tel = db.Column(db.String(500))
 
-  def __init__(self ,address,id_panier, statut,id_user,prixT):
-    self.address = address
-    self.statut = statut
+  def __init__(self ,adress,city,tel,firstName,lastName,id_user,prixT):
+    self.adress = adress
+    self.city = city
+    self.firstName = firstName
+    self.lastName = lastName
     self.id_user = id_user
     self.prixT = prixT
-    self.id_panier = id_panier
+    self.tel = tel
+
 
 
 
 class CooperativeModelSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'name', 'email','adress' ,'tel','description','image')
+        fields = ('id', 'name', 'email','adress','date' ,'tel','description','image')
 
 
 Cooperative_schema = CooperativeModelSchema()
@@ -177,10 +198,17 @@ Paniers_schema= PanierModelSchema(many=True)
 
 class CommandeModelSchema(ma.Schema):
     class Meta:
-      field = ('id','address', 'statut','date','id_panier' ,'id_user','prixT' )
+      field = ('id','adress', 'statut','date','city','lastName','firstName' ,'id_user','prixT' )
 
 Commande_schema = CommandeModelSchema()
 Commandes_schema = CommandeModelSchema(many=True)
+
+class DetailCommandeModelSchema(ma.Schema):
+    class Meta:
+      field = ('id','id_prod','id_cmd','qte' )
+
+DetailCommande_schema = DetailCommandeModelSchema()
+DetailCommandes_schema = DetailCommandeModelSchema(many=True)
 
 ## token verificatio
 def token_required(f):
@@ -311,18 +339,30 @@ def delete_panier(current_user,id):
   return jsonify(Produit_schema.dump(panier)) 
 
 ######################commande########################
-@app.route('/ajouter_commande',methods=['POST'])
+@app.route('/commande',methods=['POST'])
 @token_required
-def ajouterCommnd(current_user):
-    address = request.json['address']
-    statut = request.json['statut']
+def ajouterCommande(current_user):
+    firstName = request.json['firstName']
+    lastName = request.json['lastName']
+    city = request.json['city']
+    tel = request.json['tel']
+    adress = request.json['adress']
     id_user = request.json['id_user']
     prixT = request.json['prixT']
-    id_panier = request.json['id_panier']
-    commande = Commande(address=address,statut=statut,id_panier=id_panier,id_user=id_user , prixT=prixT)
+    commande = Commande(tel=tel,city =city,firstName=firstName,lastName =lastName,adress=adress,id_user=id_user ,prixT=prixT)
     db.session.add(commande)
     db.session.commit()
-    return jsonify({ 'results': 'Commande ajouter' })
+    
+    cmd = Commande.query.all()
+    idCmd=cmd[len(cmd)-1].id
+
+    prods= request.json['prods']
+    for i in range(len(prods)):
+      detail=Detail_commande(id_prod=prods[i]['id_prod'],id_cmd=idCmd,qte=prods[i]['qte'])
+      db.session.add(detail)
+      db.session.commit()
+    
+    return jsonify({ 'status':200,'message':"Commande attribuer"})
 
 
   
@@ -493,7 +533,9 @@ def login():
                         'email' : user.email,
                         'name' : user.name,
                         'admin': user.admin,
-                        'password': user.password  ,
+                        'password': user.password,
+                        'tel' : user.tel,
+                        'adresse' : user.adresse,
                         'isLogedIn': user.isLogedIn
         })
     return jsonify({'error':"true",
@@ -710,7 +752,7 @@ def update_message(id):
   db.session.commit()
   return jsonify({ 'status':200,'message': 'message modifier' }) 
 #################################   END MESSAGES    ####################################  
-#db.create_all()
+db.create_all()
 # Run Server
 if __name__ == '__main__':
   app.run(debug=True)
