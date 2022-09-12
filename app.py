@@ -161,7 +161,7 @@ class Commande(db.Model):
   prixT = db.Column(db.Float)
   tel = db.Column(db.String(500))
 
-  def __init__(self ,adress,city,tel,firstName,lastName,id_user,prixT):
+  def __init__(self ,adress,statut,city,tel,firstName,lastName,id_user,prixT):
     self.adress = adress
     self.city = city
     self.firstName = firstName
@@ -169,6 +169,7 @@ class Commande(db.Model):
     self.id_user = id_user
     self.prixT = prixT
     self.tel = tel
+    self.statut  = statut
 
 
 
@@ -396,6 +397,13 @@ def deleteCmd(id):
   return jsonify({'message' : "Command deleted successufly"})
 
 
+@app.route('/commande/<id>',methods=['PUT'])
+def updateCmd(id):
+  commande = Commande.query.get(id)
+  commande.statut = request.json['statut']
+  db.session.commit()
+  return jsonify({'message' : "Command Updated"})
+
 @app.route('/commandes',methods=['GET'])
 def getAllCmd():
   commandes = Commande.query.all()
@@ -404,6 +412,8 @@ def getAllCmd():
     cmd_data= {}
     cmd_data['id']= c.id
     cmd_data['adress']= c.adress
+    cmd_data['firstName'] = c.firstName
+    cmd_data['lastName'] = c.lastName
     cmd_data['statut']= c.statut
     cmd_data['id_user']= c.id_user
     cmd_data['prixT']= c.prixT
@@ -632,6 +642,22 @@ def delete_user(current_user):
       return jsonify({'status':200,'message':user.name+' deleted successfully'})
     else:
       return jsonify({'status':400,'message':'not deleted'})
+
+
+
+@app.route('/promoteuser/<id>', methods=['PUT'])
+@token_required
+def promoteUser(current_user,id):
+  user = User.query.get(id)
+  password = request.json['password']
+  admin = User.query.get(request.json['idAdmin'])
+  if check_password_hash(admin.password, password):
+    user.admin = True
+    db.session.commit()
+    return jsonify({'status':200,'message':user.name+'Has Been Promoted'})
+  else:
+    return jsonify({'status':400,'message':'not promoted'})
+
 
 #RestoreUser
 @app.route('/restorUser',methods=['PUT'])
