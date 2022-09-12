@@ -183,7 +183,7 @@ Cooperatives_schema = CooperativeModelSchema(many=True)
 
 class ProduitModelSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'nom', 'prix','cooperative' ,'description','category','qte','image')
+        fields = ('id', 'nom', 'prix','cooperative','date','description','category','qte','image')
 
 
 Produit_schema = ProduitModelSchema()
@@ -252,7 +252,22 @@ def ajouterProduit(current_user):
 
 def afficherProduit():
   produit = Produit.query.all()
-  return jsonify(Produits_schema.dump(produit))
+  output =[]
+  for c in produit:
+    pr_data= {}
+    pr_data['id']= c.id
+    pr_data['category']= c.category
+    pr_data['cooperative']= c.cooperative
+    pr_data['description']= c.description
+    pr_data['image']= c.image
+    pr_data['date']= c.date_created
+    pr_data['nom']= c.nom
+    pr_data['prix']= c.prix
+    pr_data['qte']= c.qte
+    output.append(pr_data)
+
+  return jsonify(output)
+
 
 @app.route('/product/<id>', methods=['PUT'])
 @token_required
@@ -358,46 +373,75 @@ def ajouterCommande(current_user):
 
     prods= request.json['prods']
     for i in range(len(prods)):
+      produit = Produit.query.get(prods[i]['id_prod'])
+      if prods[i]['qte'] > produit.qte :
+        return jsonify({ 'status':400,'message':"Qunatité invalide"})
+      produit.qte = produit.qte - prods[i]['qte']
+      db.session.commit()
       detail=Detail_commande(id_prod=prods[i]['id_prod'],id_cmd=idCmd,qte=prods[i]['qte'])
       db.session.add(detail)
       db.session.commit()
     
     return jsonify({ 'status':200,'message':"Commande attribuer"})
 
+@app.route('/commande/<id>',methods=['DELETE'])
+def deleteCmd(id):
+  commande = Commande.query.get(id)
+  db.session.delete(commande)
+  db.session.commit()
+  details = Detail_commande.query.filter_by(id_cmd=id).all()
+  for i in details:
+    db.session.delete(i)
+    db.session.commit()
+  return jsonify({'message' : "Command deleted successufly"})
+
+
+@app.route('/commandes',methods=['GET'])
+def getAllCmd():
+  commandes = Commande.query.all()
+  output =[]
+  for c in commandes:
+    cmd_data= {}
+    cmd_data['id']= c.id
+    cmd_data['adress']= c.adress
+    cmd_data['statut']= c.statut
+    cmd_data['id_user']= c.id_user
+    cmd_data['prixT']= c.prixT
+    cmd_data['date']= c.date
+    output.append(cmd_data)
+
+  return jsonify(output)
+
+@app.route('/details',methods=['GET'])
+def getAlldetails():
+  details = Detail_commande.query.all()
+  output =[]
+  for c in details:
+    detail_data= {}
+    detail_data['id']= c.id
+    detail_data['qte']= c.qte
+    detail_data['id_prod']= c.id_prod
+    detail_data['id_cmd']= c.id_cmd
+    output.append(detail_data)
 
   
-@app.route('/afficherComnd',methods=['GET'])
-@token_required
-def afficher_Commande(current_user):
-  liste = Commande.query.all()
-  output = []
-  for i in liste:
-    i_data= {}
-    i_data['address']= i.address
-    i_data['statut']= i.statut
-    i_data['id_user']= i.id_user
-    i_data['id_panier'] =i.id_panier
-    i_data['prixT']= i.prixT
-    i_data['date']= i.date
-    output.append(i_data)
+  return jsonify(output)
 
-  return jsonify({'liste' : output})
-
-@app.route('/afficher_commande/<id>',methods=['GET'])
-@token_required
-def afficher_commande(current_user,id):
-  comd = Commande.query.filter_by(id_user=id).first()  
-  cmd_data= {}
-  cmd_data['address']= comd.address
-  cmd_data['statut']= comd.statut
-  cmd_data['id_user']= comd.id_user
-  cmd_data['prixT']= comd.prixT
-  cmd_data['date']= comd.date
-  cmd_data['id_panier']=comd.id_panier
-  
+@app.route('/commandes/<id>',methods=['GET'])
+def afficher_commande(id):
+  commandes = Commande.query.filter_by(id_user=id).all()  
+  output =[]
+  for c in commandes:
+    cmd_data= {}
+    cmd_data['adress']= c.adress
+    cmd_data['statut']= c.statut
+    cmd_data['id_user']= c.id_user
+    cmd_data['prixT']= c.prixT
+    cmd_data['date']= c.date
+    output.append(cmd_data)
 
   
-  return jsonify({'commande': cmd_data})
+  return jsonify(output)
 
 @app.route('/modifier_commande/<id>',methods=['PUT'])
 @token_required
