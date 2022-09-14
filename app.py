@@ -15,6 +15,7 @@ from flask_cors import CORS
 from datetime import date
 
 
+
 # Init app
 app = Flask(__name__)
 CORS(app)
@@ -365,7 +366,7 @@ def ajouterCommande(current_user):
     adress = request.json['adress']
     id_user = request.json['id_user']
     prixT = request.json['prixT']
-    commande = Commande(tel=tel,city =city,firstName=firstName,lastName =lastName,adress=adress,id_user=id_user ,prixT=prixT)
+    commande = Commande(tel=tel,city =city,firstName=firstName,lastName =lastName,adress=adress,id_user=id_user ,prixT=prixT,statut="En traitement")
     db.session.add(commande)
     db.session.commit()
     
@@ -822,7 +823,52 @@ def update_message(id):
   db.session.commit()
   return jsonify({ 'status':200,'message': 'message modifier' }) 
 #################################   END MESSAGES    ####################################  
-db.create_all()
+
+@app.route('/topProducts', methods=['GET'])
+def get_topProducts():
+   details = Detail_commande.query.all()
+   output =[]
+   for d in details:
+      data ={}
+      product = Produit.query.get(d.id_prod)
+
+      cooperative = Cooperative.query.get(product.cooperative)
+      data['coopId'] = cooperative.id
+      data['coopImage'] = cooperative.image
+      data['coopName'] = cooperative.name
+      data['coopJoined'] = cooperative.date 
+      data['countProd'] = len(Produit.query.filter_by(cooperative=cooperative.id).all())
+      data['image'] = product.image
+      data['stock'] = product.qte
+      data['prix'] = product.prix
+      data['nom'] = product.nom
+      data['created'] = str(product.date_created).split()[0]
+      if len(output)==0:
+        data['id_prod'] = d.id_prod
+        data['qte'] = d.qte
+        output.append(data)
+      else:
+        test = False
+        qte=0
+        for i in output:
+          if i['id_prod'] == d.id_prod:
+            test =True
+            qte = i['qte']
+            output.remove(i)
+        if test:
+          data['id_prod'] = d.id_prod
+          data['qte'] = d.qte+qte
+          output.append(data)
+        else:
+          data['id_prod'] = d.id_prod
+          data['qte'] = d.qte
+          output.append(data)
+
+   newlist = sorted(output, key=lambda d: d['qte'], reverse=True)
+   return jsonify(newlist)
+
+
+#db.create_all()
 # Run Server
 if __name__ == '__main__':
   app.run(debug=True)
