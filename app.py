@@ -64,6 +64,7 @@ class Category(db.Model):
   id = db.Column(db.Integer, primary_key=True)
   name = db.Column(db.String(50),unique=True)
   image = db.Column(db.String(80))
+  deletedAt = db.Column(db.Date)
   
 
   def __init__(self, name, image):
@@ -80,6 +81,7 @@ class Cooperative(db.Model):
     description = db.Column(db.Text)
     image = db.Column(db.String(300))
     date = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    deletedAt = db.Column(db.Date)
   
   
     def __init__(self, name, email,adress,tel,description,image):
@@ -101,6 +103,7 @@ class Produit(db.Model):
     image = db.Column(db.String(300))
     qte = db.Column(db.Integer)
     date_created = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    deletedAt = db.Column(db.Date)
 
   
     def __init__(self, nom, prix, description, cooperative,category,qte,image):
@@ -177,7 +180,7 @@ class Commande(db.Model):
 
 class CooperativeModelSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'name', 'email','adress','date' ,'tel','description','image')
+        fields = ('id', 'name', 'email','adress','date' ,'deletedAt','tel','description','image')
 
 
 Cooperative_schema = CooperativeModelSchema()
@@ -185,7 +188,7 @@ Cooperatives_schema = CooperativeModelSchema(many=True)
 
 class ProduitModelSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'nom', 'prix','cooperative','date','description','category','qte','image')
+        fields = ('id', 'nom', 'prix','cooperative','date','description','category','deletedAt','qte','image')
 
 
 Produit_schema = ProduitModelSchema()
@@ -299,9 +302,8 @@ def delete_Produit(current_user,id):
   produit = Produit.query.get(id)
   if not produit:
     return jsonify({ 'status':400,'results': 'produit not found' }) 
-  db.session.delete(produit)
+  produit.deletedAt = date.today()
   db.session.commit()
-
   return jsonify({ 'status':200,'results': 'produit deleted' }) 
 
 
@@ -542,7 +544,7 @@ def signup_user():
                     'message':'Email existe'
         })
   else:
-    user = User(public_id=str(uuid.uuid4()), name=data['userName'],email=data['email'], password=hashed_password,admin=False)
+    user = User(public_id=str(uuid.uuid4()), name=data['userName'],email=data['email'], password=hashed_password,admin=True)
     db.session.add(user)
     db.session.commit()
     return jsonify({'message' : 'registered successfully',
@@ -555,13 +557,22 @@ def modifier_user(current_user, public_id):
   user = User.query.filter_by(public_id=public_id).first()
   if not user:
     return jsonify({'message' : 'No user found!'})
-  if not check_password_hash(user.password, request.json['password']):
-    return jsonify({'message' : 'Password invalid!'})
   user.name = request.json['name']
   if request.json['adress'] !="":
     user.adresse = request.json['adress']
   if request.json['tel'] !="":
     user.tel = request.json['tel']
+  db.session.commit()
+  return jsonify({'status':200,'message' : 'The user has updated!'})
+
+
+@app.route('/pass/<public_id>',methods=['PUT'])
+@token_required
+def modifier_pass(current_user, public_id):
+  user = User.query.filter_by(public_id=public_id).first()
+  if not user:
+    return jsonify({'message' : 'No user found!'})
+  user.password = generate_password_hash(request.json['password'], method='sha256')
   db.session.commit()
   return jsonify({'status':200,'message' : 'The user has updated!'})
 
@@ -731,7 +742,7 @@ def delete_category(current_user,id):
     return jsonify({'error':"true",
                     'message':'Category not existe'
         })
-  db.session.delete(category )
+  category.deletedAt = date.today()
   db.session.commit()
 
   return jsonify({ 'status':200,'message': 'category deleted' }) 
@@ -787,10 +798,25 @@ def update_cooperative(current_user,idc):
 def delete_cooperative(current_user,id):
 
   cooperative = Cooperative.query.get(id)
-  db.session.delete(cooperative)
+
+  products = Produit.query.filter_by(cooperative=id).all()
+  for p in products:
+    p.deletedAt = date.today()
+    db.session.commit()
+  cooperative.deletedAt = date.today()
   db.session.commit()
 
   return jsonify({ 'status':200,'message': 'cooperative deleted' }) 
+
+
+@app.route('/restoreCooperative/<id>', methods=['PUT'])
+#restore cooperative
+def restore_cooperative(id):
+  cooperative = Cooperative.query.get(id)
+  cooperative.deletedAt = None
+  db.session.commit()
+  return jsonify({ 'status':200,'message': 'cooperative resotred' }) 
+
 #affichher all cooperative
 @app.route('/cooperatives', methods=['GET'])
 def affichercooperative():
@@ -833,11 +859,18 @@ def get_topProducts():
       product = Produit.query.get(d.id_prod)
 
       cooperative = Cooperative.query.get(product.cooperative)
-      data['coopId'] = cooperative.id
-      data['coopImage'] = cooperative.image
-      data['coopName'] = cooperative.name
-      data['coopJoined'] = cooperative.date 
-      data['countProd'] = len(Produit.query.filter_by(cooperative=cooperative.id).all())
+      if cooperative :
+        data['coopId'] = cooperative.id
+        data['coopImage'] = cooperative.image
+        data['coopName'] = cooperative.name
+        data['coopJoined'] = cooperative.date 
+        data['countProd'] = len(Produit.query.filter_by(cooperative=cooperative.id).all())
+      else:
+        data['coopId'] = 0
+        data['coopImage'] = ''
+        data['coopName'] = ''
+        data['coopJoined'] = ''
+        data['countProd'] = ''
       data['image'] = product.image
       data['stock'] = product.qte
       data['prix'] = product.prix
@@ -865,6 +898,8 @@ def get_topProducts():
           output.append(data)
 
    newlist = sorted(output, key=lambda d: d['qte'], reverse=True)
+
+
    return jsonify(newlist)
 
 
