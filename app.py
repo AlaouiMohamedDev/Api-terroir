@@ -127,6 +127,7 @@ class User(db.Model):
   admin = db.Column(db.Boolean)
   isLogedIn = db.Column(db.Boolean)
   deletedAt = db.Column(db.Date)
+  image = db.Column(db.String(300))
 
  
 class Panier(db.Model):
@@ -269,6 +270,7 @@ def afficherProduit():
     pr_data['nom']= c.nom
     pr_data['prix']= c.prix
     pr_data['qte']= c.qte
+    pr_data['deletedAt'] = c.deletedAt
     output.append(pr_data)
 
   return jsonify(output)
@@ -305,6 +307,15 @@ def delete_Produit(current_user,id):
   produit.deletedAt = date.today()
   db.session.commit()
   return jsonify({ 'status':200,'results': 'produit deleted' }) 
+
+
+@app.route('/restoreProduct/<id>', methods=['PUT'])
+#restore category
+def restore_produit(id):
+  produit = Produit.query.get(id)
+  produit.deletedAt = None
+  db.session.commit()
+  return jsonify({ 'status':200,'message': 'produit resotred' }) 
 
 
 @app.route('/produit/<id>',methods=['GET'])
@@ -565,6 +576,14 @@ def modifier_user(current_user, public_id):
   db.session.commit()
   return jsonify({'status':200,'message' : 'The user has updated!'})
 
+@app.route('/userImage/<id>',methods=['PUT'])
+def userImage(id):
+  user = User.query.filter_by(id=id).first()
+  if not user:
+    return jsonify({'message' : 'No user found!'})
+  user.image = request.json['image']
+  db.session.commit()
+  return jsonify({'status':200,'message' : 'The user has updated!'})
 
 @app.route('/pass/<public_id>',methods=['PUT'])
 @token_required
@@ -602,7 +621,8 @@ def login():
                         'password': user.password,
                         'tel' : user.tel,
                         'adresse' : user.adresse,
-                        'isLogedIn': user.isLogedIn
+                        'isLogedIn': user.isLogedIn,
+                        'image': user.image
         })
     return jsonify({'error':"true",
                     'message':'Email ou mot de passe incorrecte'
@@ -696,7 +716,7 @@ Users_schema = UserModelSchema(many=True)
 
 class CategoryModelSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'name', 'image')
+        fields = ('id', 'name', 'image','deletedAt')
 
 
 Category_schema = CategoryModelSchema()
@@ -746,6 +766,14 @@ def delete_category(current_user,id):
   db.session.commit()
 
   return jsonify({ 'status':200,'message': 'category deleted' }) 
+
+@app.route('/restoreCategory/<id>', methods=['PUT'])
+#restore category
+def restore_category(id):
+  category = Category.query.get(id)
+  category.deletedAt = None
+  db.session.commit()
+  return jsonify({ 'status':200,'message': 'category resotred' }) 
 
 @app.route('/categories', methods=['GET'])
 def afficherCategory():
@@ -813,6 +841,11 @@ def delete_cooperative(current_user,id):
 #restore cooperative
 def restore_cooperative(id):
   cooperative = Cooperative.query.get(id)
+  products = Produit.query.filter_by(cooperative=id).all()
+  for p in products:
+    p.deletedAt = None
+    db.session.commit()
+  
   cooperative.deletedAt = None
   db.session.commit()
   return jsonify({ 'status':200,'message': 'cooperative resotred' }) 
