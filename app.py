@@ -555,7 +555,7 @@ def signup_user():
                     'message':'Email existe'
         })
   else:
-    user = User(public_id=str(uuid.uuid4()), name=data['userName'],email=data['email'], password=hashed_password,admin=True)
+    user = User(public_id=str(uuid.uuid4()), name=data['userName'],email=data['email'], password=hashed_password,admin=False)
     db.session.add(user)
     db.session.commit()
     return jsonify({'message' : 'registered successfully',
